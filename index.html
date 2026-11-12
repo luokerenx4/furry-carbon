@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FluffyLab — Three.js 实时毛发生成与萌宠造型工作台</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <!-- 吹风机/笔刷 3D 光标环视觉反馈 -->
+  <div id="brush-cursor" class="hidden"></div>
+
+  <!-- 顶部品牌与实时性能遥测栏 -->
+  <header class="top-bar">
+    <div class="brand">
+      <div class="brand-badge">GPU FUR ENGINE</div>
+      <div>
+        <h1>FluffyLab <span class="sub">实时双层被毛生成与交互造型系统</span></h1>
+      </div>
+    </div>
+
+    <div class="telemetry" id="telemetry-bar">
+      <div class="stat-item">
+        <span class="stat-label">FPS</span>
+        <span class="stat-value" id="stat-fps">60</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <span class="stat-label">实例化针毛</span>
+        <span class="stat-value" id="stat-strands">65,000</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <span class="stat-label">体积底绒层</span>
+        <span class="stat-value" id="stat-shells">14 层</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <span class="stat-label">总三角面</span>
+        <span class="stat-value" id="stat-tris">--</span>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button id="btn-best-practices" class="btn-accent-outline" title="查看实时毛发渲染架构与最佳实践">
+        <span>📖</span> 技术架构 &amp; Best Practices
+      </button>
+      <button id="btn-screenshot" class="btn-glass" title="保存高清透明/摄影棚快照">
+        <span>📸</span> 拍照留念
+      </button>
+    </div>
+  </header>
+
+  <!-- 左侧交互式梳毛与护理工具栏 -->
+  <aside class="left-dock">
+    <div class="dock-section-title">交互护理工具</div>
+    <div class="tool-grid" id="tool-buttons">
+      <button class="tool-btn active" data-tool="orbit" title="拖拽旋转视角，鼠标掠过宠物表面会轻柔拨开绒毛">
+        <span class="tool-icon">🤚</span>
+        <span class="tool-name">抚摸视角</span>
+      </button>
+      <button class="tool-btn" data-tool="comb" title="在宠物身上涂刷，实时改变局部毛发的生长与倒伏方向">
+        <span class="tool-icon">🪮</span>
+        <span class="tool-name">顺毛梳刷</span>
+      </button>
+      <button class="tool-btn" data-tool="trim" title="修剪推子：局部剪短毛发（比如修出博美俊介圆脸造型）">
+        <span class="tool-icon">✂️</span>
+        <span class="tool-name">修剪推子</span>
+      </button>
+      <button class="tool-btn" data-tool="grow" title="生毛营养液：局部增长加密毛发">
+        <span class="tool-icon">🌱</span>
+        <span class="tool-name">局部生毛</span>
+      </button>
+      <button class="tool-btn" data-tool="dye" title="染发喷枪：为耳朵、脸颊或尾巴喷涂渐变挑染色">
+        <span class="tool-icon">🎨</span>
+        <span class="tool-name">挑染喷枪</span>
+      </button>
+      <button class="tool-btn" data-tool="dryer" title="强力吹风机：对准宠物吹出高速暖风气旋，实时吹开万千毛丝">
+        <span class="tool-icon">💨</span>
+        <span class="tool-name">吹风机</span>
+      </button>
+    </div>
+
+    <div class="brush-settings" id="brush-settings-panel">
+      <div class="compact-row">
+        <label>笔刷半径</label>
+        <span id="val-brushRadius">0.28</span>
+      </div>
+      <input type="range" id="ctrl-brushRadius" min="0.08" max="0.65" step="0.01" value="0.28" />
+
+      <div class="compact-row">
+        <label>笔刷力度</label>
+        <span id="val-brushStrength">0.65</span>
+      </div>
+      <input type="range" id="ctrl-brushStrength" min="0.1" max="1.0" step="0.05" value="0.65" />
+
+      <div class="compact-row dye-only" id="dye-color-row">
+        <label>挑染色</label>
+        <input type="color" id="ctrl-dyeColor" value="#ff6b9d" />
+      </div>
+    </div>
+
+    <div class="dock-divider"></div>
+    <div class="dock-section-title">趣味互动</div>
+    <button id="btn-shake" class="action-pill primary-action">
+      <span>🐕</span> 抖抖毛发 (Shake!)
+    </button>
+    <button id="btn-boop" class="action-pill">
+      <span>✨</span> 开心歪头杀
+    </button>
+    <button id="btn-reset-groom" class="action-pill subtle">
+      <span>🔄</span> 复原梳剪与染色
+    </button>
+  </aside>
+
+  <!-- 底部物种与精选造型预设快选栏 -->
+  <section class="bottom-bar">
+    <div class="species-selector" id="species-buttons">
+      <button class="species-btn active" data-species="pomeranian">🐶 博美幼犬</button>
+      <button class="species-btn" data-species="kitten">🐱 圆脸奶猫</button>
+      <button class="species-btn" data-species="bunny">🐰 垂耳绒兔</button>
+      <button class="species-btn" data-species="fox">🦊 小熊猫狐</button>
+    </div>
+    <div class="preset-strip" id="preset-buttons">
+      <!-- 动态注入预设按钮 -->
+    </div>
+  </section>
+
+  <!-- 右侧深度毛发参数检视器 -->
+  <aside class="right-inspector">
+    <div class="inspector-tabs" id="inspector-tabs">
+      <button class="tab-btn active" data-tab="structure">生长结构</button>
+      <button class="tab-btn" data-tab="styling">聚簇卷曲</button>
+      <button class="tab-btn" data-tab="optics">光学花色</button>
+      <button class="tab-btn" data-tab="physics">物理灯光</button>
+    </div>
+
+    <div class="inspector-body" id="inspector-body">
+      <!-- 由 src/ui.js 动态生成结构化参数面板 -->
+    </div>
+
+    <div class="inspector-footer">
+      <button id="btn-export-json" class="btn-mini">导出预设 JSON</button>
+      <button id="btn-import-json" class="btn-mini">导入 JSON</button>
+      <input type="file" id="input-import-json" accept=".json" class="hidden" />
+    </div>
+  </aside>
+
+  <!-- Best Practices 技术白皮书抽屉弹窗 -->
+  <div id="modal-best-practices" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <span class="brand-badge">TECHNICAL DEEP DIVE</span>
+          <h2>Three.js 实时高质量生物毛发渲染 — 核心架构与 Best Practices</h2>
+        </div>
+        <button id="btn-close-modal" class="modal-close" aria-label="关闭">✕</button>
+      </div>
+      <div class="modal-content">
+        <div class="bp-grid">
+          <div class="bp-card">
+            <div class="bp-num">01</div>
+            <h3>混合双层被毛架构 (Hybrid Shells + GPU Instanced Blades)</h3>
+            <p>
+              真实哺乳动物拥有<strong>双层被毛 (Dual Coat)</strong>：底层致密绒毛负责体积覆盖与防露底，外层针毛（Guard Hairs）负责轮廓毛刺感、聚簇纹理与高光动态。
+            </p>
+            <ul>
+              <li><strong>底绒层 (Volumetric Undercoat Shells)</strong>：使用多层沿法线微距挤出的半透明噪声切片模拟高密度绒毛体积，以极低算力消除皮肤硬边。</li>
+              <li><strong>GPU 实例化多段曲率毛束 (Instanced Curved Ribbons)</strong>：单次 Draw Call 渲染最高 120,000 根 5 段式锥形弯曲发片，全部曲线形变、朝向对齐在 Vertex Shader 内完成。</li>
+            </ul>
+          </div>
+
+          <div class="bp-card">
+            <div class="bp-num">02</div>
+            <h3>拒绝“牙刷感”：Voronoi 聚簇 (Clumping) 与多频卷曲</h3>
+            <p>
+              新手做毛发最常见的问题是毛发像塑料刷子一样均匀散开。生物毛发受皮脂与静电影响，<strong>毛尖会向局部簇中心收拢成束（Clumps）</strong>。
+            </p>
+            <ul>
+              <li><strong>分层聚簇模型</strong>：为每根毛发预计算所属毛簇的锚点与法线帧，沿发根到发尖按 <code>pow(h, clumpCurve)</code> 收拢，保留蓬松发根的同时形成自然尖端毛束。</li>
+              <li><strong>切线空间螺旋与毛躁</strong>：在每根毛发的正交切线基（Tangent-Bitangent Frame）叠加螺旋正余弦波（泰迪卷毛）与高频噪声（Frizz），避免单调直线。</li>
+            </ul>
+          </div>
+
+          <div class="bp-card">
+            <div class="bp-num">03</div>
+            <h3>解剖学分区遮罩 (Anatomical Region Masking)</h3>
+            <p>
+              同一只宠物全身毛长绝非均等——如果口鼻与眼周和脖圈一样长，五官会被彻底淹没。
+            </p>
+            <ul>
+              <li><strong>SDF 有机网格与连续解剖权重</strong>：本系统采用光滑距离场（Smooth SDF）构建无接缝有机皮肤，杜绝多球穿插造成的内部无效毛发浪费。</li>
+              <li><strong>独立分区控制</strong>：眼周与鼻头自动压短并退避密度；脖圈围脖（Mane）、耳簇、尾巴大毛球、肚皮软绒各自拥有独立毛长倍率。</li>
+            </ul>
+          </div>
+
+          <div class="bp-card">
+            <div class="bp-num">04</div>
+            <h3>Kajiya-Kay / Marschner 双高光与逆光透射 (SSS)</h3>
+            <p>
+              如果直接用常规 Lambert / PBR MeshStandardMaterial 渲染毛发，毛团会显得像灰暗粗糙的石头，缺乏丝绸光泽与空气感。
+            </p>
+            <ul>
+              <li><strong>双各向异性高光瓣 (Dual Shifted Specular Lobes)</strong>：模拟毛鳞片倾斜角（Cuticle Tilt），第一层高光向发尖偏移呈冷白光泽（表面反射 $R$），第二层向发根偏移并叠加毛发色素与虹彩（内部透射反射 $TRT$）。</li>
+              <li><strong>逆光边缘散射与根部自阴影</strong>：当光线从宠物背后穿透毛尖时计算前向散射（Rim Backlight SSS），配合发根指数级 AO 与体积方向阴影，瞬间营造出温暖“想rua”的空气绒感。</li>
+            </ul>
+          </div>
+
+          <div class="bp-card">
+            <div class="bp-num">05</div>
+            <h3>零 CPU 遍历开销的弹簧惯性与 GPU 梳剪缓冲区</h3>
+            <p>
+              十万根毛发若每帧在 CPU 计算物理会直接拖垮帧率。最佳实践是<strong>粗粒度刚体角速度/线速度弹簧解算 + 逐顶点延迟传递</strong>：
+            </p>
+            <ul>
+              <li><strong>全局/骨骼弹簧场 + 相位延迟</strong>：CPU 仅解算呼吸、歪头、摇尾、抖毛与相机拖拽惯性弹簧，Shader 根据高度 <code>h²</code> 放大弯曲并注入高频风场湍流。</li>
+              <li><strong>增量式交互属性缓冲 (Grooming Attributes)</strong>：梳刷、修剪、生毛、挑染只更新射线命中半径内的局部实例 Buffer 子区间（<code>addUpdateRange</code>），实现 60FPS 丝滑实时撸宠与修毛。</li>
+            </ul>
+          </div>
+
+          <div class="bp-card">
+            <div class="bp-num">06</div>
+            <h3>工程落地与移动端分级 (LOD &amp; Production Tips)</h3>
+            <p>
+              在实际商业项目（3D 潮玩互动、虚拟宠物、车载助手）落地时的性能分级建议：
+            </p>
+            <ul>
+              <li><strong>桌面高端档</strong>：60k~100k 5段式刀片毛丝 + 12~16 层底绒 Shell + MSAA 4x。</li>
+              <li><strong>移动端中端档</strong>：降级为 15k~25k 3段式稍宽发片 + 8 层底绒 Shell，提高 <code>rootThickness</code> 约 1.4 倍以保持同等视觉饱满度。</li>
+              <li><strong>远景 LOD</strong>：距离拉远时平滑淡出外层几何针毛，仅保留多层底绒 Shell + 各向异性法线高光贴图，Draw Call 恒定极低。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
